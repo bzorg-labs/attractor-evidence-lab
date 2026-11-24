@@ -134,3 +134,68 @@ def simulate_connectivity_network(
         activity[t] = state
 
     return activity
+
+
+def simulate_with_noise(
+    connectivity,
+    steps=200,
+    noise_std=0.05,
+    initial_state=None,
+    seed=42
+):
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    connectivity = np.asarray(connectivity, dtype=float)
+
+    if connectivity.ndim != 2:
+        raise ValueError("Connectivity must be a 2D matrix")
+
+    if connectivity.shape[0] != connectivity.shape[1]:
+        raise ValueError("Connectivity matrix must be square")
+
+    n = connectivity.shape[0]
+
+    state = (
+        np.ones(n) * 0.1
+        if initial_state is None
+        else np.asarray(initial_state, dtype=float).copy()
+    )
+
+    if state.shape != (n,):
+        raise ValueError("Initial state size must match connectivity")
+
+    activity = np.zeros((steps, n))
+
+    for t in range(steps):
+        noise = rng.normal(0, noise_std, n)
+        state = np.tanh(connectivity @ state + noise)
+        activity[t] = state
+
+    return activity
+
+def simulate_noise_recovery(
+    connectivity,
+    initial_state,
+    noise_std=0.1,
+    noise_steps=100,
+    recovery_steps=400,
+    seed=42
+):
+    rng = np.random.default_rng(seed)
+    connectivity = np.asarray(connectivity, dtype=float)
+    state = np.asarray(initial_state, dtype=float).copy()
+
+    n = connectivity.shape[0]
+    activity = np.zeros((noise_steps + recovery_steps, n))
+
+    for t in range(noise_steps + recovery_steps):
+        if t < noise_steps:
+            noise = rng.normal(0, noise_std, n)
+        else:
+            noise = np.zeros(n)
+
+        state = np.tanh(connectivity @ state + noise)
+        activity[t] = state
+
+    return activity
