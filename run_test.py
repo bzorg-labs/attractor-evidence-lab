@@ -30,6 +30,23 @@ noise_steps = 100
 recovery_steps = 400
 stable_window = 10
 
+def wilson_interval(successes, total, z=1.96):
+    p = successes / total
+    denominator = 1 + z**2 / total
+
+    center = (
+        p + z**2 / (2 * total)
+    ) / denominator
+
+    margin = (
+        z * np.sqrt(
+            p * (1 - p) / total
+            + z**2 / (4 * total**2)
+        ) / denominator
+    )
+
+    return center - margin, center + margin
+
 results_dir = Path("results")
 results_dir.mkdir(exist_ok=True)
 
@@ -92,12 +109,18 @@ for noise in noise_levels:
             "final_error": final_error
         })
 
-    recovery_rate = len(recovery_times) / len(seeds)
+    successes = len(recovery_times)
+    total = len(seeds)
+
+    recovery_rate = successes / total
+
+    ci_low, ci_high = wilson_interval(
+        successes, total
+    )
 
     median_time = (
         float(np.median(recovery_times))
-        if recovery_times
-        else None
+        if recovery_times else None
     )
 
     mean_final_error = float(np.mean(final_errors))
@@ -105,15 +128,17 @@ for noise in noise_levels:
     summary_results.append({
         "noise": float(noise),
         "recovery_rate": recovery_rate,
+        "ci_low": ci_low,
+        "ci_high": ci_high,
         "median_recovery_time": median_time,
         "mean_final_error": mean_final_error
     })
 
     print(
         f"Noise={noise:.3f} | "
-        f"Recovery Rate={recovery_rate:.0%} | "
-        f"Median Time={median_time} | "
-        f"Mean Final Error={mean_final_error:.5f}"
+        f"Recovery={recovery_rate:.0%} | "
+        f"95% CI=[{ci_low:.0%}, {ci_high:.0%}] | "
+        f"Median Time={median_time}"
     )
 
 
@@ -138,7 +163,6 @@ with open(
     writer.writeheader()
     writer.writerows(all_results)
 
-
 # Save aggregated results
 with open(
     results_dir / "multi_seed_summary.csv",
@@ -151,6 +175,8 @@ with open(
         fieldnames=[
             "noise",
             "recovery_rate",
+            "ci_low",
+            "ci_high",
             "median_recovery_time",
             "mean_final_error"
         ]
@@ -172,11 +198,28 @@ recovery_rates = [
 
 plt.figure(figsize=(9, 5))
 
-plt.plot(
+
+ci_lows = [
+    item["ci_low"] * 100
+    for item in summary_results
+]
+
+ci_highs = [
+    item["ci_high"] * 100
+    for item in summary_results
+]
+
+plt.errorbar(
     noise_values,
     recovery_rates,
-    marker="o"
+    yerr=[
+        np.array(recovery_rates) - np.array(ci_lows),
+        np.array(ci_highs) - np.array(recovery_rates)
+    ],
+    marker="o",
+    capsize=4
 )
+
 
 plt.xlabel("Noise Standard Deviation")
 plt.ylabel("Recovery Rate (%)")
